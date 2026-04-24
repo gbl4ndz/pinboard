@@ -1,4 +1,4 @@
-# Claude Code Build Brief – Organic Task App
+# Claude Code Build Brief – Pinboard Task App
 
 Use this as your master instruction file or as the basis for a `CLAUDE.md` in the project root.
 
@@ -6,7 +6,7 @@ Use this as your master instruction file or as the basis for a `CLAUDE.md` in th
 
 ## Goal
 
-Bu([anthropic.com](https://www.anthropic.com/product/claude-code?utm_source=chatgpt.com))ect management app with:
+Build a team project and task management app with:
 
 - Manager and Staff roles
 - Managers can assign tasks
@@ -14,7 +14,7 @@ Bu([anthropic.com](https://www.anthropic.com/product/claude-code?utm_source=chat
 - Internal task management interface
 - Public read-only Kanban dashboard for display on a monitor
 - Real-time updates on the dashboard
-- Clean, premium UI inspired by organic farming
+- Clean, premium commercial SaaS UI
 
 The app should be optimized for maintainability, fast MVP delivery, and Laravel-native architecture.
 
@@ -40,7 +40,7 @@ Do not introduce React, Vue, or a separate frontend SPA unless explicitly reques
 
 ## Product Summary
 
-This app is a project and task management system for an organic farming-themed workflow.
+This app is a project and task management system for team workflows.
 
 There are 3 audiences:
 
@@ -66,40 +66,43 @@ There are 3 audiences:
 
 ## Design Direction
 
-The UI should feel:
+The internal app UI should feel like a commercial SaaS product (similar to Linear, Notion, or Asana):
 
-- premium
-- clean
-- calm
-- organic
-- monitor-friendly for the public dashboard
+- Clean and minimal
+- Professional typography
+- Lots of whitespace
+- Rounded task cards with subtle shadows
+- Subtle motion
+- Consistent icon system (SVG, no emoji in the internal UI)
+- Dark wordmark logo in the navigation
 
-Visual inspiration:
+The public monitor dashboard may use custom status labels and a distinct visual style suited for display screens:
 
-- soft greens
-- earth tones
-- lots of whitespace
-- rounded task cards
-- subtle motion
-- no top navigation on the public monitor dashboard
+- No top navigation
+- Full-screen friendly
+- Large, clear typography
+- Monitor-safe contrast
+- Read-only
 
-Public Kanban status labels should be farming-inspired:
+---
 
-- Seeds
-- Planted
-- Growing
-- Harvesting
-- Harvested
+## Status Keys
 
-Internal system can use normalized status keys such as:
-
+Internal status keys:
 - backlog
-n- todo
+- todo
 - in_progress
 - review
 - done
 
-Map those internal keys to public-facing labels.
+Public display labels (customizable):
+- backlog => Seeds
+- todo => Planted
+- in_progress => Growing
+- review => Harvesting
+- done => Harvested
+
+Map internal keys to public-facing labels. Internal board always uses the normalized keys.
 
 ---
 
@@ -237,14 +240,14 @@ Tasks:
 - remove navigation from public layout
 - render only public tasks
 - show read-only Kanban board
-- use farming-themed status labels
+- use custom public-facing status labels
 - add summary metrics above board
 
 Public page should include:
 - project selector if needed
 - live indicator
 - task counts
-- beautiful columns
+- wide column spacing
 - no edit controls
 - no comments
 - no private metadata
@@ -294,15 +297,15 @@ Deliverables:
 
 Tasks:
 - refine spacing, typography, colors
-- premium task cards
+- premium SaaS-style task cards
 - live animations for task movement
-- empty states
+- empty states with SVG icons (no emoji in internal UI)
 - loading states
 - responsive behavior
 - monitor dashboard optimization
 
 Deliverables:
-- production-quality presentation
+- production-quality commercial presentation
 
 ---
 
@@ -348,7 +351,7 @@ Standard Laravel users table.
 - is_public
 - sort_order
 - timestamps
-- soft deletes optional
+- soft deletes
 
 ### comments
 - id
@@ -365,24 +368,6 @@ Standard Laravel users table.
 - old_value json nullable
 - new_value json nullable
 - timestamps
-
----
-
-## Status Mapping
-
-Internal status keys:
-- backlog
-- todo
-- in_progress
-- review
-- done
-
-Public labels:
-- backlog => Seeds
-- todo => Planted
-- in_progress => Growing
-- review => Harvesting
-- done => Harvested
 
 ---
 
@@ -410,7 +395,7 @@ Public labels:
 
 ---
 
-## Service Layer Suggestions
+## Service Layer
 
 Create service classes such as:
 
@@ -476,7 +461,7 @@ Requirements:
 - large clear typography
 - summary metrics strip
 - wide column spacing
-- elegant live-updating Kanban view
+- live-updating Kanban view
 - subtle pulsing live indicator
 - monitor-safe contrast
 - read-only
@@ -506,27 +491,6 @@ When implementing this app:
 
 ---
 
-## First Task to Execute
-
-Start with **Module 1 – Project Setup**.
-
-Steps:
-- initialize Laravel app
-- configure auth with Breeze
-- install Livewire
-- install Spatie Permission
-- install Reverb broadcasting support
-- prepare base layout and dashboard shell
-- create a seeded manager account
-- verify app boots successfully
-
-After Module 1 is complete:
-- summarize the work
-- list exact commands run
-- identify the next module
-
----
-
 ## Output Style
 
 For each module, output:
@@ -542,5 +506,4 @@ For each module, output:
 
 ## Instruction to Claude Code
 
-Build this application as a clean Laravel MVP with premium UI foundations. Work sequentially, keep the implementation practical, and prioritize a usable, monitor-friendly public Kanban dashboard with real-time updates.
-
+Build this application as a clean Laravel MVP with a commercial SaaS UI. Work sequentially, keep the implementation practical, and prioritize a usable, monitor-friendly public Kanban dashboard with real-time updates.
