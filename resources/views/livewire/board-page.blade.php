@@ -1,7 +1,9 @@
-<div class="px-4 sm:px-6 lg:px-8 py-6">
+<div class="py-6">
 
     {{-- Livewire loading bar --}}
     <div wire:loading.delay wire:target="taskMoved" class="loading-bar"></div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
     {{-- ── Header ──────────────────────────────────────────────────────────── --}}
     <div class="flex items-center justify-between mb-5">
@@ -151,8 +153,10 @@
         </div>
     @endif
 
+    </div>{{-- end constrained header/stats wrapper --}}
+
     {{-- ── Kanban columns ───────────────────────────────────────────────────── --}}
-    <div class="flex gap-4 overflow-x-auto pb-6 items-start scrollbar-thin"
+    <div class="flex gap-4 justify-center pb-6 items-start px-4 sm:px-6 lg:px-8 mt-0"
          wire:ignore.self>
 
         @foreach($this->columns as $status)
