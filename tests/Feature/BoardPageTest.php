@@ -16,8 +16,8 @@ class BoardPageTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected User $manager;
-    protected User $staff;
+    protected User $owner;
+    protected User $member;
     protected Project $project;
 
     protected function setUp(): void
@@ -25,32 +25,39 @@ class BoardPageTest extends TestCase
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
 
-        $this->manager = User::factory()->create();
-        $this->manager->assignRole('manager');
+        $this->owner = User::factory()->create();
+        $this->owner->assignRole('user');
 
-        $this->staff = User::factory()->create();
-        $this->staff->assignRole('staff');
+        $this->member = User::factory()->create();
+        $this->member->assignRole('user');
 
-        $this->project = Project::factory()->create(['created_by' => $this->manager->id]);
-
-        // Staff must be a project member to access the board
-        $this->project->members()->attach($this->staff->id);
+        $this->project = Project::factory()->create(['created_by' => $this->owner->id]);
+        $this->project->members()->attach($this->member->id);
     }
 
     // ── Access ─────────────────────────────────────────────────────────────
 
-    public function test_manager_can_access_board(): void
+    public function test_project_creator_can_access_board(): void
     {
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->get(route('projects.board', $this->project))
             ->assertOk();
     }
 
-    public function test_staff_can_access_board(): void
+    public function test_project_member_can_access_board(): void
     {
-        $this->actingAs($this->staff)
+        $this->actingAs($this->member)
             ->get(route('projects.board', $this->project))
             ->assertOk();
+    }
+
+    public function test_non_member_cannot_access_board(): void
+    {
+        $outsider = User::factory()->create()->assignRole('user');
+
+        $this->actingAs($outsider)
+            ->get(route('projects.board', $this->project))
+            ->assertForbidden();
     }
 
     public function test_unauthenticated_user_cannot_access_board(): void
@@ -63,7 +70,7 @@ class BoardPageTest extends TestCase
 
     public function test_board_renders_all_status_columns(): void
     {
-        Livewire::actingAs($this->manager)
+        Livewire::actingAs($this->owner)
             ->test(BoardPage::class, ['project' => $this->project])
             ->assertSee('Backlog')
             ->assertSee('To Do')
@@ -74,86 +81,69 @@ class BoardPageTest extends TestCase
 
     public function test_board_shows_tasks_in_correct_column(): void
     {
-        $task = Task::factory()->create([
+        Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
             'status'     => TaskStatus::InProgress->value,
             'title'      => 'Growing crop',
         ]);
 
-        Livewire::actingAs($this->manager)
+        Livewire::actingAs($this->owner)
             ->test(BoardPage::class, ['project' => $this->project])
             ->assertSee('Growing crop');
     }
 
     // ── taskMoved ──────────────────────────────────────────────────────────
 
-    public function test_manager_can_move_any_task(): void
+    public function test_creator_can_move_any_task(): void
     {
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
             'status'     => TaskStatus::Backlog->value,
             'sort_order' => 100,
         ]);
 
-        Livewire::actingAs($this->manager)
+        Livewire::actingAs($this->owner)
             ->test(BoardPage::class, ['project' => $this->project])
             ->call('taskMoved', $task->id, 'in_progress', [$task->id]);
 
         $this->assertEquals('in_progress', $task->fresh()->status->value);
     }
 
-    public function test_staff_can_move_assigned_task(): void
+    public function test_any_project_member_can_move_any_task(): void
     {
+        // Any member can move — not just the creator or assignee
         $task = Task::factory()->create([
-            'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
-            'assigned_to' => $this->staff->id,
-            'status'     => TaskStatus::Todo->value,
-        ]);
-
-        Livewire::actingAs($this->staff)
-            ->test(BoardPage::class, ['project' => $this->project])
-            ->call('taskMoved', $task->id, 'in_progress', [$task->id]);
-
-        $this->assertEquals('in_progress', $task->fresh()->status->value);
-    }
-
-    public function test_staff_cannot_move_unassigned_task(): void
-    {
-        $task = Task::factory()->create([
-            'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'project_id'  => $this->project->id,
+            'created_by'  => $this->owner->id,
             'assigned_to' => null,
-            'status'     => TaskStatus::Backlog->value,
+            'status'      => TaskStatus::Todo->value,
         ]);
 
-        Livewire::actingAs($this->staff)
+        Livewire::actingAs($this->member)
             ->test(BoardPage::class, ['project' => $this->project])
             ->call('taskMoved', $task->id, 'in_progress', [$task->id]);
 
-        // Status should remain unchanged
-        $this->assertEquals('backlog', $task->fresh()->status->value);
+        $this->assertEquals('in_progress', $task->fresh()->status->value);
     }
 
     public function test_task_moved_updates_sort_orders(): void
     {
         $t1 = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
             'status'     => 'todo',
             'sort_order' => 100,
         ]);
         $t2 = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
             'status'     => 'backlog',
             'sort_order' => 100,
         ]);
 
-        // Move t2 into todo, placing it before t1
-        Livewire::actingAs($this->manager)
+        Livewire::actingAs($this->owner)
             ->test(BoardPage::class, ['project' => $this->project])
             ->call('taskMoved', $t2->id, 'todo', [$t2->id, $t1->id]);
 
@@ -165,11 +155,11 @@ class BoardPageTest extends TestCase
     {
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
             'status'     => 'backlog',
         ]);
 
-        Livewire::actingAs($this->manager)
+        Livewire::actingAs($this->owner)
             ->test(BoardPage::class, ['project' => $this->project])
             ->call('taskMoved', $task->id, 'invalid_status', [$task->id]);
 

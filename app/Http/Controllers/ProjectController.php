@@ -53,8 +53,7 @@ class ProjectController extends Controller
 
         $project->load(['members']);
 
-        $nonMembers = User::role(['manager', 'staff'])
-            ->whereNotIn('id', $project->members->pluck('id'))
+        $nonMembers = User::whereNotIn('id', $project->members->pluck('id'))
             ->orderBy('name')
             ->get();
 

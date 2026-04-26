@@ -7,63 +7,52 @@ use App\Models\User;
 
 class TaskPolicy
 {
+    /** Any authenticated user can reach the tasks index. */
     public function viewAny(User $user): bool
     {
-        return $user->hasPermissionTo('view projects');
+        return true;
     }
 
+    /** Only project members may view a task. */
     public function view(User $user, Task $task): bool
     {
-        if ($user->hasRole('manager')) {
-            return true;
-        }
-
         return $task->project->hasMember($user);
     }
 
+    /** Any authenticated user may create a task (project membership enforced at the route level). */
     public function create(User $user): bool
     {
-        return $user->hasPermissionTo('create task');
+        return true;
     }
 
+    /** Task creator or the assigned user may edit a task. */
     public function update(User $user, Task $task): bool
     {
-        if ($user->hasPermissionTo('update any task')) {
-            return true;
-        }
-
-        if ($user->hasPermissionTo('update own task')) {
-            return $task->created_by === $user->id;
-        }
-
-        return false;
+        return $user->id === $task->created_by
+            || $user->id === $task->assigned_to;
     }
 
+    /** Any project member may move a task across statuses. */
     public function move(User $user, Task $task): bool
     {
-        if ($user->hasPermissionTo('move any task')) {
-            return true;
-        }
-
-        if ($user->hasPermissionTo('move assigned task')) {
-            return $task->assigned_to === $user->id;
-        }
-
-        return false;
+        return $task->project->hasMember($user);
     }
 
+    /** Any project member may assign a task. */
     public function assign(User $user, Task $task): bool
     {
-        return $user->hasPermissionTo('assign task');
+        return $task->project->hasMember($user);
     }
 
+    /** Only the task creator may delete a task. */
     public function delete(User $user, Task $task): bool
     {
-        return $user->hasPermissionTo('delete task');
+        return $user->id === $task->created_by;
     }
 
+    /** Any project member may comment on a task. */
     public function comment(User $user, Task $task): bool
     {
-        return $user->hasPermissionTo('comment on task');
+        return $task->project->hasMember($user);
     }
 }

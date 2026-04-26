@@ -64,8 +64,7 @@
                    class="form-input">
         </div>
 
-        {{-- Assignee (manager only) --}}
-        @if(auth()->user()->hasPermissionTo('assign task'))
+        {{-- Assignee --}}
         <div>
             <label for="assigned_to" class="form-label">Assign to</label>
             <select id="assigned_to" name="assigned_to" class="form-input">
@@ -78,7 +77,6 @@
                 @endforeach
             </select>
         </div>
-        @endif
 
     </div>
 

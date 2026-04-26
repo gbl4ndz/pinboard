@@ -5,8 +5,8 @@ namespace Tests\Feature;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -14,115 +14,145 @@ class RolesAndPermissionsTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected User $manager;
-    protected User $staff;
+    protected User $owner;
+    protected User $member;
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->seed(RolesAndPermissionsSeeder::class);
 
-        // Re-seed roles/permissions for each test
-        $this->seed(\Database\Seeders\RolesAndPermissionsSeeder::class);
+        $this->owner  = User::factory()->create();
+        $this->owner->assignRole('user');
 
-        $this->manager = User::factory()->create();
-        $this->manager->assignRole('manager');
-
-        $this->staff = User::factory()->create();
-        $this->staff->assignRole('staff');
+        $this->member = User::factory()->create();
+        $this->member->assignRole('user');
     }
 
-    public function test_manager_has_project_permissions(): void
+    // ── Role setup ─────────────────────────────────────────────────────────
+
+    public function test_single_user_role_exists(): void
     {
-        $this->assertTrue($this->manager->hasPermissionTo('create projects'));
-        $this->assertTrue($this->manager->hasPermissionTo('update projects'));
-        $this->assertTrue($this->manager->hasPermissionTo('delete projects'));
+        $this->assertTrue(Role::where('name', 'user')->exists());
     }
 
-    public function test_staff_cannot_create_or_delete_projects(): void
+    public function test_old_manager_role_does_not_exist(): void
     {
-        $this->assertFalse($this->staff->hasPermissionTo('create projects'));
-        $this->assertFalse($this->staff->hasPermissionTo('delete projects'));
+        $this->assertFalse(Role::where('name', 'manager')->exists());
     }
 
-    public function test_staff_can_view_projects(): void
+    public function test_old_staff_role_does_not_exist(): void
     {
-        $this->assertTrue($this->staff->hasPermissionTo('view projects'));
+        $this->assertFalse(Role::where('name', 'staff')->exists());
     }
 
-    public function test_manager_can_assign_and_move_any_task(): void
+    // ── Project policies ───────────────────────────────────────────────────
+
+    public function test_any_user_can_create_a_project(): void
     {
-        $this->assertTrue($this->manager->hasPermissionTo('assign task'));
-        $this->assertTrue($this->manager->hasPermissionTo('move any task'));
-        $this->assertTrue($this->manager->hasPermissionTo('delete task'));
+        $this->assertTrue($this->owner->can('create', Project::class));
+        $this->assertTrue($this->member->can('create', Project::class));
     }
 
-    public function test_staff_can_create_and_update_own_tasks(): void
+    public function test_project_creator_can_view_their_project(): void
     {
-        $this->assertTrue($this->staff->hasPermissionTo('create task'));
-        $this->assertTrue($this->staff->hasPermissionTo('update own task'));
-        $this->assertTrue($this->staff->hasPermissionTo('move assigned task'));
+        $project = Project::factory()->create(['created_by' => $this->owner->id]);
+        // Creator is auto-added as member
+        $this->assertTrue($this->owner->can('view', $project));
     }
 
-    public function test_staff_cannot_delete_or_assign_tasks(): void
+    public function test_project_member_can_view_project(): void
     {
-        $this->assertFalse($this->staff->hasPermissionTo('delete task'));
-        $this->assertFalse($this->staff->hasPermissionTo('assign task'));
+        $project = Project::factory()->create(['created_by' => $this->owner->id]);
+        $project->members()->attach($this->member->id);
+
+        $this->assertTrue($this->member->can('view', $project));
     }
 
-    public function test_task_policy_update_allows_manager_on_any_task(): void
+    public function test_non_member_cannot_view_project(): void
     {
-        $task = new Task(['created_by' => 9999, 'assigned_to' => 9999]);
-        $this->assertTrue($this->manager->can('update', $task));
+        $project = Project::factory()->create(['created_by' => $this->owner->id]);
+
+        $this->assertFalse($this->member->can('view', $project));
     }
 
-    public function test_task_policy_update_allows_staff_on_own_task(): void
+    public function test_project_creator_can_update_their_project(): void
     {
-        $task = new Task(['created_by' => $this->staff->id, 'assigned_to' => 9999]);
-        $this->assertTrue($this->staff->can('update', $task));
+        $project = Project::factory()->create(['created_by' => $this->owner->id]);
+
+        $this->assertTrue($this->owner->can('update', $project));
     }
 
-    public function test_task_policy_update_denies_staff_on_others_task(): void
+    public function test_non_creator_cannot_update_project(): void
     {
-        $task = new Task(['created_by' => 9999, 'assigned_to' => 9999]);
-        $this->assertFalse($this->staff->can('update', $task));
+        $project = Project::factory()->create(['created_by' => $this->owner->id]);
+        $project->members()->attach($this->member->id);
+
+        $this->assertFalse($this->member->can('update', $project));
     }
 
-    public function test_task_policy_move_allows_staff_on_assigned_task(): void
+    public function test_project_creator_can_delete_their_project(): void
     {
-        $task = new Task(['created_by' => 9999, 'assigned_to' => $this->staff->id]);
-        $this->assertTrue($this->staff->can('move', $task));
+        $project = Project::factory()->create(['created_by' => $this->owner->id]);
+
+        $this->assertTrue($this->owner->can('delete', $project));
     }
 
-    public function test_task_policy_move_denies_staff_on_unassigned_task(): void
+    public function test_non_creator_cannot_delete_project(): void
     {
-        $task = new Task(['created_by' => 9999, 'assigned_to' => 9999]);
-        $this->assertFalse($this->staff->can('move', $task));
+        $project = Project::factory()->create(['created_by' => $this->owner->id]);
+        $project->members()->attach($this->member->id);
+
+        $this->assertFalse($this->member->can('delete', $project));
     }
 
-    public function test_project_policy_view_allows_manager_without_membership(): void
+    public function test_only_project_creator_can_invite_members(): void
     {
-        $project = Project::factory()->create(['created_by' => $this->manager->id]);
-        $this->assertTrue($this->manager->can('view', $project));
+        $project = Project::factory()->create(['created_by' => $this->owner->id]);
+
+        $this->assertTrue($this->owner->can('invite', $project));
+        $this->assertFalse($this->member->can('invite', $project));
     }
 
-    public function test_project_policy_view_allows_staff_when_member(): void
+    // ── Task policies ──────────────────────────────────────────────────────
+
+    public function test_task_creator_can_update_their_task(): void
     {
-        $project = Project::factory()->create(['created_by' => $this->manager->id]);
-        $project->members()->attach($this->staff->id);
-        $this->assertTrue($this->staff->can('view', $project));
+        $task = new Task(['created_by' => $this->owner->id, 'assigned_to' => null]);
+
+        $this->assertTrue($this->owner->can('update', $task));
     }
 
-    public function test_project_policy_view_denies_staff_when_not_member(): void
+    public function test_assignee_can_update_task(): void
     {
-        $project = Project::factory()->create(['created_by' => $this->manager->id]);
-        $this->assertFalse($this->staff->can('view', $project));
+        $task = new Task(['created_by' => $this->owner->id, 'assigned_to' => $this->member->id]);
+
+        $this->assertTrue($this->member->can('update', $task));
     }
 
-    public function test_any_authenticated_user_can_create_a_project(): void
+    public function test_unrelated_user_cannot_update_task(): void
     {
-        $this->assertTrue($this->staff->can('create', Project::class));
-        $this->assertTrue($this->manager->can('create', Project::class));
+        $other = User::factory()->create()->assignRole('user');
+        $task  = new Task(['created_by' => $this->owner->id, 'assigned_to' => $this->member->id]);
+
+        $this->assertFalse($other->can('update', $task));
     }
+
+    public function test_task_creator_can_delete_their_task(): void
+    {
+        $task = new Task(['created_by' => $this->owner->id, 'assigned_to' => null]);
+
+        $this->assertTrue($this->owner->can('delete', $task));
+    }
+
+    public function test_non_creator_cannot_delete_task(): void
+    {
+        $task = new Task(['created_by' => $this->owner->id, 'assigned_to' => null]);
+
+        $this->assertFalse($this->member->can('delete', $task));
+    }
+
+    // ── Dashboard / auth ───────────────────────────────────────────────────
 
     public function test_dashboard_redirects_unauthenticated_user(): void
     {
@@ -131,7 +161,7 @@ class RolesAndPermissionsTest extends TestCase
 
     public function test_dashboard_accessible_to_authenticated_user(): void
     {
-        $this->actingAs($this->manager)->get('/dashboard')->assertOk();
+        $this->actingAs($this->owner)->get('/dashboard')->assertOk();
     }
 
     public function test_public_board_accessible_without_auth(): void

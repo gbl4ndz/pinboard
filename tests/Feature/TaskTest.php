@@ -15,8 +15,8 @@ class TaskTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected User $manager;
-    protected User $staff;
+    protected User $owner;
+    protected User $member;
     protected Project $project;
 
     protected function setUp(): void
@@ -24,34 +24,46 @@ class TaskTest extends TestCase
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
 
-        $this->manager = User::factory()->create();
-        $this->manager->assignRole('manager');
+        // $owner created the project and is auto-added as member
+        $this->owner = User::factory()->create();
+        $this->owner->assignRole('user');
 
-        $this->staff = User::factory()->create();
-        $this->staff->assignRole('staff');
+        // $member is a project member (explicitly attached)
+        $this->member = User::factory()->create();
+        $this->member->assignRole('user');
 
-        $this->project = Project::factory()->create(['created_by' => $this->manager->id]);
+        $this->project = Project::factory()->create(['created_by' => $this->owner->id]);
+        $this->project->members()->attach($this->member->id);
     }
 
     // ── Create / Store ─────────────────────────────────────────────────────
 
-    public function test_manager_can_view_create_form(): void
+    public function test_project_creator_can_view_create_form(): void
     {
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->get(route('projects.tasks.create', $this->project))
             ->assertOk();
     }
 
-    public function test_staff_can_view_create_form(): void
+    public function test_project_member_can_view_create_form(): void
     {
-        $this->actingAs($this->staff)
+        $this->actingAs($this->member)
             ->get(route('projects.tasks.create', $this->project))
             ->assertOk();
     }
 
-    public function test_manager_can_create_task(): void
+    public function test_non_member_cannot_view_create_form(): void
     {
-        $this->actingAs($this->manager)
+        $outsider = User::factory()->create()->assignRole('user');
+
+        $this->actingAs($outsider)
+            ->get(route('projects.tasks.create', $this->project))
+            ->assertForbidden();
+    }
+
+    public function test_project_creator_can_create_task(): void
+    {
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title'    => 'Plant the seedlings',
                 'status'   => TaskStatus::Todo->value,
@@ -62,14 +74,14 @@ class TaskTest extends TestCase
         $this->assertDatabaseHas('tasks', [
             'title'      => 'Plant the seedlings',
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
             'status'     => 'todo',
         ]);
     }
 
-    public function test_staff_can_create_task(): void
+    public function test_project_member_can_create_task(): void
     {
-        $this->actingAs($this->staff)
+        $this->actingAs($this->member)
             ->post(route('projects.tasks.store', $this->project), [
                 'title'    => 'Water the crops',
                 'status'   => TaskStatus::Backlog->value,
@@ -79,13 +91,26 @@ class TaskTest extends TestCase
 
         $this->assertDatabaseHas('tasks', [
             'title'      => 'Water the crops',
-            'created_by' => $this->staff->id,
+            'created_by' => $this->member->id,
         ]);
+    }
+
+    public function test_non_member_cannot_create_task(): void
+    {
+        $outsider = User::factory()->create()->assignRole('user');
+
+        $this->actingAs($outsider)
+            ->post(route('projects.tasks.store', $this->project), [
+                'title'    => 'Sneaky task',
+                'status'   => 'todo',
+                'priority' => 'low',
+            ])
+            ->assertForbidden();
     }
 
     public function test_task_requires_title(): void
     {
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title'    => '',
                 'status'   => 'todo',
@@ -96,10 +121,10 @@ class TaskTest extends TestCase
 
     public function test_sort_order_is_assigned_automatically(): void
     {
-        $this->actingAs($this->manager)->post(route('projects.tasks.store', $this->project), [
+        $this->actingAs($this->owner)->post(route('projects.tasks.store', $this->project), [
             'title' => 'First', 'status' => 'backlog', 'priority' => 'low',
         ]);
-        $this->actingAs($this->manager)->post(route('projects.tasks.store', $this->project), [
+        $this->actingAs($this->owner)->post(route('projects.tasks.store', $this->project), [
             'title' => 'Second', 'status' => 'backlog', 'priority' => 'low',
         ]);
 
@@ -107,104 +132,96 @@ class TaskTest extends TestCase
         $this->assertEquals([100, 200], $orders->toArray());
     }
 
-    public function test_staff_cannot_assign_task_to_another_user(): void
+    public function test_any_member_can_assign_a_task(): void
     {
-        $other = User::factory()->create();
-        $other->assignRole('staff');
-
-        $this->actingAs($this->staff)
-            ->post(route('projects.tasks.store', $this->project), [
-                'title'       => 'Sneaky assign',
-                'status'      => 'todo',
-                'priority'    => 'low',
-                'assigned_to' => $other->id,
-            ]);
-
-        $this->assertDatabaseHas('tasks', ['title' => 'Sneaky assign', 'assigned_to' => null]);
-    }
-
-    public function test_manager_can_assign_task(): void
-    {
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title'       => 'Assigned task',
                 'status'      => 'todo',
                 'priority'    => 'medium',
-                'assigned_to' => $this->staff->id,
+                'assigned_to' => $this->member->id,
             ]);
 
         $this->assertDatabaseHas('tasks', [
             'title'       => 'Assigned task',
-            'assigned_to' => $this->staff->id,
+            'assigned_to' => $this->member->id,
         ]);
     }
 
     // ── Show ──────────────────────────────────────────────────────────────
 
-    public function test_both_roles_can_view_task(): void
+    public function test_project_members_can_view_task(): void
     {
-        $this->project->members()->attach($this->staff->id);
-        $task = Task::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->manager->id]);
+        $task = Task::factory()->create([
+            'project_id' => $this->project->id,
+            'created_by' => $this->owner->id,
+        ]);
 
-        $this->actingAs($this->manager)->get(route('tasks.show', $task))->assertOk();
-        $this->actingAs($this->staff)->get(route('tasks.show', $task))->assertOk();
+        $this->actingAs($this->owner)->get(route('tasks.show', $task))->assertOk();
+        $this->actingAs($this->member)->get(route('tasks.show', $task))->assertOk();
     }
 
-    public function test_staff_cannot_view_task_in_unassigned_project(): void
+    public function test_non_member_cannot_view_task(): void
     {
-        $task = Task::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->manager->id]);
+        $outsider = User::factory()->create()->assignRole('user');
+        $task = Task::factory()->create([
+            'project_id' => $this->project->id,
+            'created_by' => $this->owner->id,
+        ]);
 
-        $this->actingAs($this->staff)
+        $this->actingAs($outsider)
             ->get(route('tasks.show', $task))
             ->assertForbidden();
     }
 
     // ── Update ─────────────────────────────────────────────────────────────
 
-    public function test_manager_can_update_any_task(): void
+    public function test_task_creator_can_update_their_task(): void
     {
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->staff->id,
+            'created_by' => $this->member->id,
         ]);
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->member)
             ->put(route('tasks.update', $task), [
-                'title'    => 'Updated by manager',
+                'title'    => 'Updated by creator',
                 'status'   => 'in_progress',
                 'priority' => 'high',
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('tasks', ['id' => $task->id, 'title' => 'Updated by manager']);
+        $this->assertDatabaseHas('tasks', ['id' => $task->id, 'title' => 'Updated by creator']);
     }
 
-    public function test_staff_can_update_own_task(): void
+    public function test_assignee_can_update_task(): void
     {
         $task = Task::factory()->create([
-            'project_id' => $this->project->id,
-            'created_by' => $this->staff->id,
+            'project_id'  => $this->project->id,
+            'created_by'  => $this->owner->id,
+            'assigned_to' => $this->member->id,
         ]);
 
-        $this->actingAs($this->staff)
+        $this->actingAs($this->member)
             ->put(route('tasks.update', $task), [
-                'title'    => 'Staff own edit',
-                'status'   => 'todo',
-                'priority' => 'low',
+                'title'    => 'Updated by assignee',
+                'status'   => 'in_progress',
+                'priority' => 'medium',
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('tasks', ['id' => $task->id, 'title' => 'Staff own edit']);
+        $this->assertDatabaseHas('tasks', ['id' => $task->id, 'title' => 'Updated by assignee']);
     }
 
-    public function test_staff_cannot_update_others_task(): void
+    public function test_unrelated_member_cannot_update_task(): void
     {
         $task = Task::factory()->create([
-            'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'project_id'  => $this->project->id,
+            'created_by'  => $this->owner->id,
+            'assigned_to' => null,
         ]);
 
-        $this->actingAs($this->staff)
+        $this->actingAs($this->member)
             ->put(route('tasks.update', $task), [
                 'title'    => 'Hacked',
                 'status'   => 'done',
@@ -215,28 +232,28 @@ class TaskTest extends TestCase
 
     // ── Delete ─────────────────────────────────────────────────────────────
 
-    public function test_manager_can_delete_task(): void
+    public function test_task_creator_can_delete_their_task(): void
     {
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
         ]);
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->delete(route('tasks.destroy', $task))
             ->assertRedirect();
 
         $this->assertSoftDeleted('tasks', ['id' => $task->id]);
     }
 
-    public function test_staff_cannot_delete_task(): void
+    public function test_non_creator_cannot_delete_task(): void
     {
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->staff->id,
+            'created_by' => $this->owner->id,
         ]);
 
-        $this->actingAs($this->staff)
+        $this->actingAs($this->member)
             ->delete(route('tasks.destroy', $task))
             ->assertForbidden();
     }
@@ -247,10 +264,10 @@ class TaskTest extends TestCase
     {
         Task::factory(3)->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
         ]);
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->get(route('projects.show', $this->project))
             ->assertOk()
             ->assertSee('Tasks');

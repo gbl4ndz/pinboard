@@ -15,14 +15,14 @@ class PublicBoardTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected User $manager;
+    protected User $owner;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
-        $this->manager = User::factory()->create();
-        $this->manager->assignRole('manager');
+        $this->owner = User::factory()->create();
+        $this->owner->assignRole('user');
     }
 
     // ── Accessibility ──────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ class PublicBoardTest extends TestCase
     {
         $project = Project::factory()->create([
             'is_public'  => true,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
         ]);
 
         $this->get(route('public.board', ['slug' => $project->slug]))->assertOk();
@@ -46,14 +46,14 @@ class PublicBoardTest extends TestCase
 
     public function test_only_public_tasks_are_shown(): void
     {
-        $project = Project::factory()->create(['is_public' => true, 'created_by' => $this->manager->id]);
+        $project = Project::factory()->create(['is_public' => true, 'created_by' => $this->owner->id]);
 
         $public  = Task::factory()->create([
-            'project_id' => $project->id, 'created_by' => $this->manager->id,
+            'project_id' => $project->id, 'created_by' => $this->owner->id,
             'is_public' => true, 'title' => 'Visible task',
         ]);
         $private = Task::factory()->create([
-            'project_id' => $project->id, 'created_by' => $this->manager->id,
+            'project_id' => $project->id, 'created_by' => $this->owner->id,
             'is_public' => false, 'title' => 'Hidden task',
         ]);
 
@@ -64,9 +64,9 @@ class PublicBoardTest extends TestCase
 
     public function test_tasks_from_private_projects_not_shown(): void
     {
-        $private = Project::factory()->create(['is_public' => false, 'created_by' => $this->manager->id]);
+        $private = Project::factory()->create(['is_public' => false, 'created_by' => $this->owner->id]);
         Task::factory()->create([
-            'project_id' => $private->id, 'created_by' => $this->manager->id,
+            'project_id' => $private->id, 'created_by' => $this->owner->id,
             'is_public' => true, 'title' => 'Should not appear',
         ]);
 
@@ -79,9 +79,9 @@ class PublicBoardTest extends TestCase
 
     public function test_private_task_of_public_project_is_hidden(): void
     {
-        $project = Project::factory()->create(['is_public' => true, 'created_by' => $this->manager->id]);
+        $project = Project::factory()->create(['is_public' => true, 'created_by' => $this->owner->id]);
         Task::factory()->create([
-            'project_id' => $project->id, 'created_by' => $this->manager->id,
+            'project_id' => $project->id, 'created_by' => $this->owner->id,
             'is_public' => false, 'title' => 'Secret task',
         ]);
 
@@ -93,7 +93,7 @@ class PublicBoardTest extends TestCase
 
     public function test_status_labels_are_displayed_on_public_board(): void
     {
-        Project::factory()->create(['is_public' => true, 'created_by' => $this->manager->id]);
+        Project::factory()->create(['is_public' => true, 'created_by' => $this->owner->id]);
 
         Livewire::test(PublicBoard::class)
             ->assertSee('Backlog')
@@ -107,9 +107,9 @@ class PublicBoardTest extends TestCase
 
     public function test_no_edit_or_delete_controls_on_public_board(): void
     {
-        $project = Project::factory()->create(['is_public' => true, 'created_by' => $this->manager->id]);
+        $project = Project::factory()->create(['is_public' => true, 'created_by' => $this->owner->id]);
         Task::factory()->create([
-            'project_id' => $project->id, 'created_by' => $this->manager->id, 'is_public' => true,
+            'project_id' => $project->id, 'created_by' => $this->owner->id, 'is_public' => true,
         ]);
 
         Livewire::test(PublicBoard::class, ['slug' => $project->slug])
@@ -121,11 +121,11 @@ class PublicBoardTest extends TestCase
 
     public function test_project_selector_switches_project(): void
     {
-        $p1 = Project::factory()->create(['is_public' => true, 'created_by' => $this->manager->id, 'name' => 'Farm Alpha']);
-        $p2 = Project::factory()->create(['is_public' => true, 'created_by' => $this->manager->id, 'name' => 'Farm Beta']);
+        $p1 = Project::factory()->create(['is_public' => true, 'created_by' => $this->owner->id, 'name' => 'Farm Alpha']);
+        $p2 = Project::factory()->create(['is_public' => true, 'created_by' => $this->owner->id, 'name' => 'Farm Beta']);
 
         Task::factory()->create([
-            'project_id' => $p2->id, 'created_by' => $this->manager->id,
+            'project_id' => $p2->id, 'created_by' => $this->owner->id,
             'is_public' => true, 'title' => 'Beta task',
         ]);
 
@@ -139,10 +139,10 @@ class PublicBoardTest extends TestCase
 
     public function test_soft_deleted_task_not_shown_on_public_board(): void
     {
-        $project = Project::factory()->create(['is_public' => true, 'created_by' => $this->manager->id]);
+        $project = Project::factory()->create(['is_public' => true, 'created_by' => $this->owner->id]);
         $task    = Task::factory()->create([
             'project_id' => $project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
             'is_public'  => true,
             'title'      => 'Deleted public task',
         ]);
@@ -157,14 +157,14 @@ class PublicBoardTest extends TestCase
 
     public function test_metrics_reflect_public_task_counts(): void
     {
-        $project = Project::factory()->create(['is_public' => true, 'created_by' => $this->manager->id]);
+        $project = Project::factory()->create(['is_public' => true, 'created_by' => $this->owner->id]);
 
         Task::factory()->create([
-            'project_id' => $project->id, 'created_by' => $this->manager->id,
+            'project_id' => $project->id, 'created_by' => $this->owner->id,
             'is_public' => true, 'status' => 'done',
         ]);
         Task::factory()->create([
-            'project_id' => $project->id, 'created_by' => $this->manager->id,
+            'project_id' => $project->id, 'created_by' => $this->owner->id,
             'is_public' => false, 'status' => 'done', // private — should not count
         ]);
 

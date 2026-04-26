@@ -25,13 +25,13 @@ class GuestAccessTest extends TestCase
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
 
-        $manager = User::factory()->create();
-        $manager->assignRole('manager');
+        $owner = User::factory()->create();
+        $owner->assignRole('user');
 
-        $this->project = Project::factory()->create(['created_by' => $manager->id]);
+        $this->project = Project::factory()->create(['created_by' => $owner->id]);
         $this->task    = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $manager->id,
+            'created_by' => $owner->id,
         ]);
     }
 

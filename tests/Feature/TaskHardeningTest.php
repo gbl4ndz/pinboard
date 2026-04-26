@@ -20,8 +20,8 @@ class TaskHardeningTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected User $manager;
-    protected User $staff;
+    protected User $owner;
+    protected User $member;
     protected Project $project;
 
     protected function setUp(): void
@@ -29,20 +29,21 @@ class TaskHardeningTest extends TestCase
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
 
-        $this->manager = User::factory()->create();
-        $this->manager->assignRole('manager');
+        $this->owner = User::factory()->create();
+        $this->owner->assignRole('user');
 
-        $this->staff = User::factory()->create();
-        $this->staff->assignRole('staff');
+        $this->member = User::factory()->create();
+        $this->member->assignRole('user');
 
-        $this->project = Project::factory()->create(['created_by' => $this->manager->id]);
+        $this->project = Project::factory()->create(['created_by' => $this->owner->id]);
+        $this->project->members()->attach($this->member->id);
     }
 
     // ── Validation ─────────────────────────────────────────────────────────
 
     public function test_task_title_max_length_is_enforced(): void
     {
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title'    => str_repeat('a', 256),
                 'status'   => 'backlog',
@@ -53,7 +54,7 @@ class TaskHardeningTest extends TestCase
 
     public function test_invalid_task_status_is_rejected_on_create(): void
     {
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title'    => 'Bad status task',
                 'status'   => 'flying',
@@ -64,7 +65,7 @@ class TaskHardeningTest extends TestCase
 
     public function test_invalid_task_priority_is_rejected_on_create(): void
     {
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title'    => 'Bad priority task',
                 'status'   => 'backlog',
@@ -77,10 +78,10 @@ class TaskHardeningTest extends TestCase
     {
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
         ]);
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->put(route('tasks.update', $task), [
                 'title'    => $task->title,
                 'status'   => 'not_a_status',
@@ -93,10 +94,10 @@ class TaskHardeningTest extends TestCase
     {
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
         ]);
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->put(route('tasks.update', $task), [
                 'title'    => $task->title,
                 'status'   => 'backlog',
@@ -107,7 +108,7 @@ class TaskHardeningTest extends TestCase
 
     public function test_due_date_must_be_a_valid_date(): void
     {
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title'    => 'Date test',
                 'status'   => 'backlog',
@@ -121,12 +122,11 @@ class TaskHardeningTest extends TestCase
     {
         Event::fake();
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title'    => 'No public flag',
                 'status'   => 'backlog',
                 'priority' => 'low',
-                // is_public intentionally omitted
             ]);
 
         $this->assertDatabaseHas('tasks', [
@@ -139,7 +139,7 @@ class TaskHardeningTest extends TestCase
     {
         Event::fake();
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title'       => 'No description',
                 'status'      => 'backlog',
@@ -151,47 +151,20 @@ class TaskHardeningTest extends TestCase
         $this->assertDatabaseHas('tasks', ['title' => 'No description', 'description' => null]);
     }
 
-    // ── Staff assigned_to protection ───────────────────────────────────────
-
-    public function test_staff_cannot_change_assigned_to_via_update(): void
-    {
-        $other = User::factory()->create();
-        $other->assignRole('staff');
-
-        $task = Task::factory()->create([
-            'project_id'  => $this->project->id,
-            'created_by'  => $this->staff->id,
-            'assigned_to' => null,
-        ]);
-
-        Event::fake();
-
-        $this->actingAs($this->staff)
-            ->put(route('tasks.update', $task), [
-                'title'       => $task->title,
-                'status'      => $task->status->value,
-                'priority'    => $task->priority->value,
-                'assigned_to' => $other->id,
-            ]);
-
-        // assigned_to should remain null — silently ignored for non-managers
-        $this->assertNull($task->fresh()->assigned_to);
-    }
-
     // ── Soft-delete isolation ──────────────────────────────────────────────
 
     public function test_soft_deleted_task_not_shown_on_project_show(): void
     {
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
             'title'      => 'Ghost task',
         ]);
 
         Event::fake();
-        $task->delete(); // soft delete
+        $task->delete();
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->get(route('projects.show', $this->project))
             ->assertDontSee('Ghost task');
     }
@@ -200,14 +173,14 @@ class TaskHardeningTest extends TestCase
     {
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
             'title'      => 'Deleted card',
         ]);
 
         Event::fake();
         $task->delete();
 
-        Livewire::actingAs($this->manager)
+        Livewire::actingAs($this->owner)
             ->test(BoardPage::class, ['project' => $this->project])
             ->assertDontSee('Deleted card');
     }
@@ -216,13 +189,13 @@ class TaskHardeningTest extends TestCase
     {
         $task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
         ]);
 
         Event::fake();
         $task->delete();
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->get(route('tasks.show', $task))
             ->assertNotFound();
     }

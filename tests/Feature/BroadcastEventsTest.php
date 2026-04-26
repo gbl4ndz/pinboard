@@ -21,7 +21,7 @@ class BroadcastEventsTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected User $manager;
+    protected User $owner;
     protected Project $project;
 
     protected function setUp(): void
@@ -29,10 +29,10 @@ class BroadcastEventsTest extends TestCase
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
 
-        $this->manager = User::factory()->create();
-        $this->manager->assignRole('manager');
+        $this->owner = User::factory()->create();
+        $this->owner->assignRole('user');
 
-        $this->project = Project::factory()->create(['created_by' => $this->manager->id]);
+        $this->project = Project::factory()->create(['created_by' => $this->owner->id]);
     }
 
     // ── TaskCreated ────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ class BroadcastEventsTest extends TestCase
     {
         Event::fake([TaskCreatedEvent::class]);
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title' => 'New seed', 'status' => 'backlog', 'priority' => 'low',
             ]);
@@ -81,9 +81,9 @@ class BroadcastEventsTest extends TestCase
     public function test_task_updated_event_fires_on_update(): void
     {
         Event::fake([TaskUpdatedEvent::class]);
-        $task = Task::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->manager->id]);
+        $task = Task::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id]);
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->put(route('tasks.update', $task), [
                 'title' => 'Updated', 'status' => 'todo', 'priority' => 'medium',
             ]);
@@ -96,7 +96,7 @@ class BroadcastEventsTest extends TestCase
     public function test_task_moved_event_fires_on_board_move(): void
     {
         Event::fake([TaskMovedEvent::class]);
-        $task = Task::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->manager->id, 'status' => 'backlog']);
+        $task = Task::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id, 'status' => 'backlog']);
 
         $service = new TaskBoardService(new TaskOrderingService());
         $service->moveTask($task, 'todo', [$task->id]);
@@ -117,9 +117,9 @@ class BroadcastEventsTest extends TestCase
     public function test_task_deleted_event_fires_on_destroy(): void
     {
         Event::fake([TaskDeletedEvent::class]);
-        $task = Task::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->manager->id]);
+        $task = Task::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id]);
 
-        $this->actingAs($this->manager)->delete(route('tasks.destroy', $task));
+        $this->actingAs($this->owner)->delete(route('tasks.destroy', $task));
 
         Event::assertDispatched(TaskDeletedEvent::class);
     }

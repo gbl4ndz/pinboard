@@ -19,22 +19,20 @@ class TaskController extends Controller
 {
     public function create(Project $project): View
     {
+        $this->authorize('view', $project);   // must be a project member
         $this->authorize('create', Task::class);
 
-        $assignableUsers = User::role(['manager', 'staff'])->orderBy('name')->get();
+        $assignableUsers = $project->members()->orderBy('name')->get();
 
         return view('tasks.create', compact('project', 'assignableUsers'));
     }
 
     public function store(Request $request, Project $project): RedirectResponse
     {
+        $this->authorize('view', $project);   // must be a project member
         $this->authorize('create', Task::class);
 
         $data = $request->validate($this->taskRules());
-
-        if (!$request->user()->hasPermissionTo('assign task')) {
-            $data['assigned_to'] = null;
-        }
 
         $data['project_id'] = $project->id;
         $data['created_by'] = $request->user()->id;
@@ -64,7 +62,7 @@ class TaskController extends Controller
         $this->authorize('update', $task);
 
         $project         = $task->project;
-        $assignableUsers = User::role(['manager', 'staff'])->orderBy('name')->get();
+        $assignableUsers = $project->members()->orderBy('name')->get();
 
         return view('tasks.edit', compact('project', 'task', 'assignableUsers'));
     }
@@ -74,10 +72,6 @@ class TaskController extends Controller
         $this->authorize('update', $task);
 
         $data = $request->validate($this->taskRules());
-
-        if (!$request->user()->hasPermissionTo('assign task')) {
-            unset($data['assigned_to']);
-        }
 
         $data['is_public'] = $request->boolean('is_public');
 

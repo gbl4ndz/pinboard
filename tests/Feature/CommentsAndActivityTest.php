@@ -19,8 +19,8 @@ class CommentsAndActivityTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected User $manager;
-    protected User $staff;
+    protected User $owner;
+    protected User $member;
     protected Project $project;
     protected Task $task;
 
@@ -29,47 +29,51 @@ class CommentsAndActivityTest extends TestCase
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
 
-        $this->manager = User::factory()->create();
-        $this->manager->assignRole('manager');
+        $this->owner = User::factory()->create();
+        $this->owner->assignRole('user');
 
-        $this->staff = User::factory()->create();
-        $this->staff->assignRole('staff');
+        $this->member = User::factory()->create();
+        $this->member->assignRole('user');
 
-        $this->project = Project::factory()->create(['created_by' => $this->manager->id]);
+        $this->project = Project::factory()->create(['created_by' => $this->owner->id]);
+        $this->project->members()->attach($this->member->id);
 
         $this->task = Task::factory()->create([
             'project_id' => $this->project->id,
-            'created_by' => $this->manager->id,
+            'created_by' => $this->owner->id,
         ]);
     }
 
     // ── Comments ───────────────────────────────────────────────────────────
 
-    public function test_manager_can_post_comment(): void
+    public function test_project_owner_can_post_comment(): void
     {
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('tasks.comments.store', $this->task), ['body' => 'Great progress!'])
             ->assertRedirect(route('tasks.show', $this->task));
 
         $this->assertDatabaseHas('comments', [
             'task_id' => $this->task->id,
-            'user_id' => $this->manager->id,
+            'user_id' => $this->owner->id,
             'body'    => 'Great progress!',
         ]);
     }
 
-    public function test_staff_can_post_comment(): void
+    public function test_project_member_can_post_comment(): void
     {
-        $this->actingAs($this->staff)
+        $this->actingAs($this->member)
             ->post(route('tasks.comments.store', $this->task), ['body' => 'Working on it'])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('comments', ['body' => 'Working on it', 'user_id' => $this->staff->id]);
+        $this->assertDatabaseHas('comments', [
+            'body'    => 'Working on it',
+            'user_id' => $this->member->id,
+        ]);
     }
 
     public function test_comment_body_is_required(): void
     {
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('tasks.comments.store', $this->task), ['body' => ''])
             ->assertSessionHasErrors('body');
     }
@@ -78,11 +82,11 @@ class CommentsAndActivityTest extends TestCase
     {
         Comment::factory()->create([
             'task_id' => $this->task->id,
-            'user_id' => $this->manager->id,
+            'user_id' => $this->owner->id,
             'body'    => 'Visible comment',
         ]);
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->get(route('tasks.show', $this->task))
             ->assertSee('Visible comment');
     }
@@ -91,7 +95,7 @@ class CommentsAndActivityTest extends TestCase
     {
         Comment::factory()->create([
             'task_id' => $this->task->id,
-            'user_id' => $this->manager->id,
+            'user_id' => $this->owner->id,
             'body'    => 'Secret comment',
         ]);
 
@@ -104,7 +108,7 @@ class CommentsAndActivityTest extends TestCase
     {
         Event::fake();
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->post(route('projects.tasks.store', $this->project), [
                 'title' => 'New task', 'status' => 'backlog', 'priority' => 'low',
             ]);
@@ -120,7 +124,7 @@ class CommentsAndActivityTest extends TestCase
     {
         Event::fake();
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->put(route('tasks.update', $this->task), [
                 'title'    => $this->task->title,
                 'status'   => 'done',
@@ -139,7 +143,7 @@ class CommentsAndActivityTest extends TestCase
 
         $this->task->update(['priority' => 'low']);
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->put(route('tasks.update', $this->task->fresh()), [
                 'title'    => $this->task->title,
                 'status'   => $this->task->status->value,
@@ -156,7 +160,7 @@ class CommentsAndActivityTest extends TestCase
     {
         Event::fake();
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->put(route('tasks.update', $this->task), [
                 'title'    => $this->task->title,
                 'status'   => $this->task->status->value,
@@ -200,7 +204,7 @@ class CommentsAndActivityTest extends TestCase
     {
         Event::fake();
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->delete(route('tasks.destroy', $this->task));
 
         $this->assertDatabaseHas('activity_logs', [
@@ -212,12 +216,12 @@ class CommentsAndActivityTest extends TestCase
     public function test_activity_log_shown_on_task_show_page(): void
     {
         ActivityLog::create([
-            'task_id'   => $this->task->id,
-            'user_id'   => $this->manager->id,
-            'action'    => 'created',
+            'task_id' => $this->task->id,
+            'user_id' => $this->owner->id,
+            'action'  => 'created',
         ]);
 
-        $this->actingAs($this->manager)
+        $this->actingAs($this->owner)
             ->get(route('tasks.show', $this->task))
             ->assertSee('created this task');
     }
@@ -226,7 +230,7 @@ class CommentsAndActivityTest extends TestCase
     {
         ActivityLog::create([
             'task_id' => $this->task->id,
-            'user_id' => $this->manager->id,
+            'user_id' => $this->owner->id,
             'action'  => 'created',
         ]);
 
@@ -239,7 +243,7 @@ class CommentsAndActivityTest extends TestCase
     {
         $logger = new ActivityLogger();
 
-        $this->actingAs($this->manager);
+        $this->actingAs($this->owner);
 
         $before = ['status' => 'backlog', 'priority' => 'medium', 'assigned_to' => null, 'title' => 'Old'];
         $after  = ['status' => 'todo',    'priority' => 'medium', 'assigned_to' => null, 'title' => 'Old'];
@@ -254,7 +258,7 @@ class CommentsAndActivityTest extends TestCase
     {
         $comment = Comment::factory()->create([
             'task_id' => $this->task->id,
-            'user_id' => $this->manager->id,
+            'user_id' => $this->owner->id,
         ]);
 
         $this->assertNotNull($comment->id);
