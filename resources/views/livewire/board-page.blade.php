@@ -1,4 +1,4 @@
-<div class="max-w-full px-5 py-5">
+<div class="px-4 sm:px-6 lg:px-8 py-6">
 
     {{-- Livewire loading bar --}}
     <div wire:loading.delay wire:target="taskMoved" class="loading-bar"></div>
