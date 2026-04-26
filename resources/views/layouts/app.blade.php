@@ -7,29 +7,31 @@
 
         <title>{{ config('app.name', 'Pinboard') }}</title>
 
-        <!-- Fonts -->
+        <!-- Fonts: Inter -->
         <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" rel="stylesheet" />
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         @livewireStyles
     </head>
-    <body class="font-sans antialiased bg-stone-50 text-stone-800">
-        <div class="min-h-screen">
+    <body class="font-sans antialiased bg-stone-50 text-stone-800 min-h-screen"
+          style="font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;">
+
+        <div class="min-h-screen flex flex-col">
             @include('layouts.navigation')
 
             <!-- Page Heading -->
             @isset($header)
-                <header class="bg-white border-b border-stone-200">
-                    <div class="max-w-7xl mx-auto py-5 px-4 sm:px-6 lg:px-8">
+                <header class="bg-white border-b border-stone-200/80">
+                    <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
                         {{ $header }}
                     </div>
                 </header>
             @endisset
 
             <!-- Page Content -->
-            <main>
+            <main class="flex-1">
                 {{ $slot }}
             </main>
         </div>
