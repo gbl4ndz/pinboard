@@ -36,7 +36,7 @@
             <select id="status" name="status" class="form-input">
                 @foreach($statuses as $s)
                     <option value="{{ $s->value }}"
-                        {{ old('status', ($task->status ?? \App\Enums\TaskStatus::Backlog)->value) === $s->value ? 'selected' : '' }}>
+                        {{ old('status', ($task->status ?? \App\Enums\TaskStatus::Todo)->value) === $s->value ? 'selected' : '' }}>
                         {{ $s->label() }}
                     </option>
                 @endforeach
