@@ -1,4 +1,46 @@
-<div class="py-6">
+<div class="py-6" x-data="{
+    commentOpen: false,
+    commentTaskId: null,
+    commentTaskTitle: '',
+    commentBody: '',
+    commentSubmitting: false,
+    commentError: '',
+    openComment(taskId, taskTitle) {
+        this.commentTaskId = taskId;
+        this.commentTaskTitle = taskTitle;
+        this.commentBody = '';
+        this.commentError = '';
+        this.commentOpen = true;
+        this.$nextTick(() => this.$refs.commentTextarea && this.$refs.commentTextarea.focus());
+    },
+    async submitComment() {
+        if (!this.commentBody.trim()) return;
+        this.commentSubmitting = true;
+        this.commentError = '';
+        try {
+            const resp = await fetch('/tasks/' + this.commentTaskId + '/comments', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ body: this.commentBody }),
+            });
+            if (resp.ok) {
+                this.commentOpen = false;
+                this.commentBody = '';
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                this.commentError = data.message || 'Something went wrong.';
+            }
+        } catch {
+            this.commentError = 'Network error. Please try again.';
+        } finally {
+            this.commentSubmitting = false;
+        }
+    }
+}" @keydown.escape.window="commentOpen = false">
 
     {{-- Livewire loading bar --}}
     <div wire:loading.delay wire:target="taskMoved" class="loading-bar"></div>
@@ -310,6 +352,23 @@
 
                                     {{-- Meta icons --}}
                                     <div class="flex items-center gap-2 text-stone-400 shrink-0">
+                                        {{-- Comment button — mousedown.stop keeps SortableJS from treating this as a drag --}}
+                                        @can('comment', $task)
+                                        <button type="button"
+                                                class="flex items-center gap-0.5 text-[11px] font-medium
+                                                       text-stone-400 hover:text-green-700 transition-colors duration-150"
+                                                @mousedown.stop
+                                                @click.stop="openComment({{ $task->id }}, '{{ addslashes($task->title) }}')"
+                                                title="Add comment">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                            </svg>
+                                            @if($task->comments_count > 0)
+                                                {{ $task->comments_count }}
+                                            @endif
+                                        </button>
+                                        @else
                                         @if($task->comments_count > 0)
                                             <span class="flex items-center gap-0.5 text-[11px] font-medium">
                                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -319,6 +378,7 @@
                                                 {{ $task->comments_count }}
                                             </span>
                                         @endif
+                                        @endcan
                                         @if($task->due_date && !$isOverdue && !$isDueToday && !$isDueTomorrow)
                                             <span class="flex items-center gap-0.5 text-[11px] font-medium">
                                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -352,6 +412,77 @@
             </div>
         @endforeach
 
+    </div>
+
+    {{-- ── Comment modal ──────────────────────────────────────────────────── --}}
+    <div x-show="commentOpen"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4"
+         style="display: none;"
+         @click.self="commentOpen = false">
+
+        {{-- Backdrop --}}
+        <div class="absolute inset-0 bg-stone-900/50 backdrop-blur-sm"></div>
+
+        {{-- Panel --}}
+        <div class="relative bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-md p-6 animate-scale-in"
+             @click.stop>
+
+            {{-- Header --}}
+            <div class="flex items-start justify-between mb-4">
+                <div class="min-w-0 pr-4">
+                    <h3 class="text-sm font-semibold text-stone-900">Add Comment</h3>
+                    <p class="text-xs text-stone-400 mt-0.5 truncate" x-text="commentTaskTitle"></p>
+                </div>
+                <button @click="commentOpen = false"
+                        class="shrink-0 p-1.5 rounded-lg text-stone-400 hover:text-stone-700
+                               hover:bg-stone-100 transition-colors duration-150">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            {{-- Form --}}
+            <form @submit.prevent="submitComment">
+                <textarea x-ref="commentTextarea"
+                          x-model="commentBody"
+                          rows="4"
+                          placeholder="Write a comment…"
+                          :disabled="commentSubmitting"
+                          class="form-input resize-none mb-3"></textarea>
+
+                <p x-show="commentError"
+                   x-text="commentError"
+                   class="text-xs text-red-500 mb-3 -mt-1"></p>
+
+                <div class="flex items-center justify-end gap-2">
+                    <button type="button"
+                            @click="commentOpen = false"
+                            class="btn btn-sm btn-secondary">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="btn btn-sm btn-primary"
+                            :disabled="commentSubmitting || !commentBody.trim()">
+                        <svg x-show="!commentSubmitting" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                        </svg>
+                        <svg x-show="commentSubmitting" class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        <span x-text="commentSubmitting ? 'Posting…' : 'Post Comment'"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
     @assets

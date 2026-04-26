@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 
 class CommentController extends Controller
 {
-    public function store(Request $request, Task $task): RedirectResponse
+    public function store(Request $request, Task $task)
     {
         $this->authorize('comment', $task);
 
@@ -21,6 +21,10 @@ class CommentController extends Controller
             'user_id' => $request->user()->id,
             'body'    => $request->body,
         ]);
+
+        if ($request->wantsJson()) {
+            return response()->json(['message' => 'Comment added.'], 201);
+        }
 
         return redirect()->route('tasks.show', $task)
             ->with('success', 'Comment added.');
